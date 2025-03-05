@@ -1,0 +1,228 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+
+model Customer {
+  customerID    Int      @id @default(autoincrement())
+  firstName     String
+  lastName      String
+  customerPhone String
+  cusCreatedAt  DateTime
+  reservations  Reservations[]
+}
+
+model Tables {
+  tabID        Int      @id @default(autoincrement())
+  tabTypes     String
+  tabStatus    String?
+  tabCreatedAt DateTime
+  reservations Reservations[]
+  orders       Orders[]
+}
+
+model Reservations {
+  resID          Int      @id @default(autoincrement())
+  resDate        String
+  resTime        String
+  numberOfPeople Int
+  resStatus      String?
+  resCreatedAt   DateTime
+  customer       Customer @relation(fields: [Customer_customerID], references: [customerID])
+  table          Tables   @relation(fields: [Tables_tabID], references: [tabID])
+
+  Customer_customerID Int
+  Tables_tabID        Int
+}
+
+model Employee {
+  empID     Int      @id @default(autoincrement())
+  empFname  String
+  empLname  String
+  empPhone  String
+  position  String
+  salary    Float
+  orders    Orders[]
+  stockIns  Stock_In[]
+
+  TimeScription TimeScription[]
+
+  StockOut StockOut[]
+  canceledStockIns Stock_In[] @relation("CanceledByEmployee")
+}
+
+model Orders {
+  orderID       Int      @id @default(autoincrement())
+  orderStatus   String?
+  orderCreatedAt DateTime
+  table         Tables    @relation(fields: [Tables_tabID], references: [tabID])
+  employee      Employee  @relation(fields: [Employee_empID], references: [empID])
+  orderItems    orderItem[] // เชื่อมโยงกับหลายรายการใน `orderItem`
+  bill          Bill?
+
+  Tables_tabID  Int
+  Employee_empID Int
+}
+
+
+model BuffetTypes {
+  buffetTypeID    Int    @id @default(autoincrement())
+  buffetTypePrice Int
+  buffetTypesName String @unique
+  menuItems       MenuItems[]
+}
+
+model MenuItems {
+  menuItemsID      Int      @id @default(autoincrement())
+  menuItemNameTHA  String
+  menuItemNameENG  String
+  menuItemsPrice   Int
+  itemImage        String
+  description      String?
+  menuItemCreateAt DateTime
+  category         String
+  buffetType       BuffetTypes @relation(fields: [BuffetTypes_buffetTypeID], references: [buffetTypeID])
+  orderItems       orderItem[]
+
+  BuffetTypes_buffetTypeID Int
+}
+
+model orderItem {
+  Orders_orderID       Int
+  MenuItems_menuItemsID Int
+  Quantity             Int
+
+  order     Orders    @relation(fields: [Orders_orderID], references: [orderID], onDelete: Cascade)
+  menuItem  MenuItems @relation(fields: [MenuItems_menuItemsID], references: [menuItemsID], onDelete: Cascade)
+
+  @@id([Orders_orderID, MenuItems_menuItemsID])  // Composite Primary Key
+}
+
+
+model Bill {
+  billID        Int      @id @default(autoincrement())
+  vat           Int
+  paymentStatus String?
+  netAmount     Float
+  grandTotal    Float
+  discount      Float?
+  totalAmount   Float
+  billCreateAt  DateTime
+  billStatus    String
+  order         Orders   @relation(fields: [Orders_orderID], references: [orderID])
+  payment       Payment?
+
+  Orders_orderID Int @unique
+}
+
+model Payment {
+  paymentID    Int     @id @default(autoincrement())
+  paymentTypes String?
+  totalAmount  Float
+  bill         Bill    @relation(fields: [Bill_billID], references: [billID])
+
+  Bill_billID  Int @unique
+}
+
+model Stock {
+  stockID        Int     @id @default(autoincrement())
+  ingredientName String  @unique
+  costPrice      Float
+  Unit           String
+  Quantity       Float   @default(0)
+  minQuantity    Float  @default(0)
+  LastUpdated    DateTime
+  imageUrl     String?
+  isDeleted      Boolean @default(false)  // เพิ่มฟิลด์ใหม่
+  deletedAt      DateTime?  // เพิ่มฟิลด์เก็บเวลาที่ลบ
+  timeScription  TimeScription[]
+  stockInDetail  Stock_In_Detail[]
+
+  StockOutDetail StockOutDetail[]
+}
+
+model TimeScription {
+  TimeScriptionID Int      @id @default(autoincrement())
+  Employee_empID  Int
+  Stock_stockID   Int
+  tsCreatedAt     DateTime?
+  Unit            String?
+  Quantity        Float?
+  note            String?
+
+  employee Employee @relation(fields: [Employee_empID], references: [empID])
+  stock    Stock    @relation(fields: [Stock_stockID], references: [stockID])
+  
+  // เพิ่ม indexes เพื่อประสิทธิภาพในการค้นหา
+  @@index([Employee_empID])
+  @@index([Stock_stockID])
+}
+
+model Stock_In {
+  stockInID       Int      @id @default(autoincrement())
+  stockInDateTime DateTime
+  totalPrice      Float
+  Employee_empID Int
+  note String?
+  isCanceled     Boolean  @default(false)    // เพิ่มฟิลด์สถานะการยกเลิก
+  canceledAt     DateTime?                   // เพิ่มเวลาที่ยกเลิก
+  cancelNote     String?                     // เพิ่มหมายเหตุการยกเลิก
+  canceledBy     Int?                  // เพิ่มรหัสพนักงานที่ยกเลิก
+
+  canceledByEmployee Employee? @relation("CanceledByEmployee", fields: [canceledBy], references: [empID])
+  employee        Employee @relation(fields: [Employee_empID], references: [empID])
+  stockInDetail   Stock_In_Detail[]
+
+}
+
+model Stock_In_Detail {
+  stockInDetailID Int      @id @default(autoincrement())
+  stockIn        Stock_In  @relation(fields: [Stock_In_stockInID], references: [stockInID])
+  stock          Stock     @relation(fields: [Stock_stockID], references: [stockID])
+  ingredientName String
+  quantity       Float
+  unit           String
+  pricePerUnit   Float
+  totalPrice     Float
+
+  Stock_In_stockInID Int
+  Stock_stockID      Int
+}
+
+model StockOut {
+  stockOutID    Int       @id @default(autoincrement()) // รหัสการเบิก
+  stockOutDate  DateTime  // วันที่และเวลาในการเบิก
+  totalPrice    Float     // ราคาทั้งหมด (คำนวณจากจำนวน * ราคาต่อหน่วย)
+  note          String?   // หมายเหตุการเบิก (Optional)
+  
+  // การเชื่อมโยงกับ Employee (พนักงานที่ทำการเบิก)
+  employee      Employee  @relation(fields: [empID], references: [empID])
+  empID         Int       // รหัสพนักงาน
+
+  // การเชื่อมโยงกับ StockOutDetail (รายละเอียดการเบิก)
+  stockOutDetails StockOutDetail[] // รายละเอียดการเบิกหลายรายการ
+}
+
+model StockOutDetail {
+  stockOutDetailID Int      @id @default(autoincrement()) // รหัสรายละเอียดการเบิก
+  stockOut        StockOut  @relation(fields: [stockOutID], references: [stockOutID]) // เชื่อมโยงกับ StockOut
+  stock           Stock     @relation(fields: [stockID], references: [stockID])       // เชื่อมโยงกับ Stock
+  ingredientName  String    // ชื่อวัตถุดิบที่เบิก
+  quantity        Float     // จำนวนที่เบิก
+  unit            String    // หน่วยของวัตถุดิบที่เบิก (เช่น kg, ชิ้น)
+  pricePerUnit    Float     // ราคาต่อหน่วยของวัตถุดิบ
+  totalPrice      Float     // ราคาทั้งหมด (คำนวณจาก quantity * pricePerUnit)
+
+  stockOutID      Int       // รหัสการเบิก (เชื่อมโยงกับ StockOut)
+  stockID         Int       // รหัสวัตถุดิบที่เบิก (เชื่อมโยงกับ Stock)
+}
+
+
+
+
