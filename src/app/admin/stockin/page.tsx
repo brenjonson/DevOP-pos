@@ -4,7 +4,8 @@ import Admintemplate from "@/components/Admintemplate";
 import { Button } from "@/components/ui/button";
 import { 
   Calendar, Search, Eye, ArrowUpDown, 
-  Download, RefreshCw, Plus 
+  Download, RefreshCw, Plus, Users,
+  ChevronDown
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -28,6 +29,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { addDays, format, startOfMonth, endOfMonth, isToday } from "date-fns";
+import { th } from "date-fns/locale";
 import Modalreceipt from "@/components/Modalreceipt";
 import { fetchStockInDetails } from "@/actions/actions";
 import { Badge } from "@/components/ui/badge";
@@ -39,12 +48,12 @@ export default function StockInPage() {
   const [stockInDetails, setStockInDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filteredStockIns, setFilteredStockIns] = useState([]);
-  const [dateRange, setDateRange] = useState({ from: null, to: null });
+  const [dateRange, setDateRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
   const [sortDirection, setSortDirection] = useState({ date: 'desc', price: null });
   const [stats, setStats] = useState({
     totalEntries: 0,
     totalValue: 0,
-    averageValue: 0
+    uniqueEmployees: 0
   });
 
   // ดึงข้อมูลการนำเข้า
@@ -61,10 +70,19 @@ export default function StockInPage() {
       
       // คำนวณสถิติ
       const totalValue = data.reduce((sum, item) => sum + item.totalPrice, 0);
+      
+      // นับจำนวนพนักงานที่ไม่ซ้ำกัน
+      const uniqueEmployeeIds = new Set();
+      data.forEach(item => {
+        if (item.employee && item.Employee_empID) {
+          uniqueEmployeeIds.add(item.Employee_empID);
+        }
+      });
+      
       setStats({
         totalEntries: data.length,
         totalValue: totalValue,
-        averageValue: data.length > 0 ? totalValue / data.length : 0
+        uniqueEmployees: uniqueEmployeeIds.size
       });
     } catch (error) {
       console.error('Error fetching stock ins:', error);
@@ -125,10 +143,19 @@ export default function StockInPage() {
     
     // คำนวณสถิติใหม่
     const totalValue = filtered.reduce((sum, item) => sum + item.totalPrice, 0);
+    
+    // นับจำนวนพนักงานที่ไม่ซ้ำกันในข้อมูลที่กรอง
+    const uniqueEmployeeIds = new Set();
+    filtered.forEach(item => {
+      if (item.employee && item.Employee_empID) {
+        uniqueEmployeeIds.add(item.Employee_empID);
+      }
+    });
+    
     setStats({
       totalEntries: filtered.length,
       totalValue: totalValue,
-      averageValue: filtered.length > 0 ? totalValue / filtered.length : 0
+      uniqueEmployees: uniqueEmployeeIds.size
     });
   };
 
@@ -175,7 +202,7 @@ export default function StockInPage() {
           </div>
           <div className="flex gap-2 mt-4 md:mt-0">
             <Link href="/admin/stockindetail">
-              <Button className="bg-[#FFB8DA] hover:bg-[#fcc6e0]">
+              <Button className="bg-pink-500 hover:bg-pink-600 text-white">
                 <Plus className="h-4 w-4 mr-2" /> นำเข้าสินค้าใหม่
               </Button>
             </Link>
@@ -205,10 +232,13 @@ export default function StockInPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-500">มูลค่าเฉลี่ยต่อรายการ</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-500">จำนวนพนักงานที่นำเข้า</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatPrice(stats.averageValue)}</div>
+              <div className="text-2xl font-bold flex items-center">
+                <Users className="h-5 w-5 mr-2 text-blue-500" />
+                {stats.uniqueEmployees} คน
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -228,15 +258,130 @@ export default function StockInPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <div className="flex items-center gap-2 border px-3 py-2 rounded-md">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm">
-                    {dateRange.from && dateRange.to ? 
-                      `${new Date(dateRange.from).toLocaleDateString()} - ${new Date(dateRange.to).toLocaleDateString()}` : 
-                      'ทุกวัน'}
-                  </span>
-                </div>
-                <Button type="button" className="bg-[#FFB8DA] hover:bg-[#fcc6e0]" onClick={filterData}>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-10 w-[210px] justify-between border-gray-300 bg-white hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-pink-500" />
+                        <span className="text-sm">
+                          {dateRange.from && dateRange.to
+                            ? `${format(dateRange.from, "d MMM", { locale: th })} - ${format(dateRange.to, "d MMM", { locale: th })}`
+                            : "เลือกช่วงวันที่"}
+                        </span>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-gray-500" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 border border-gray-200 rounded-md shadow-lg" align="start">
+                    <div className="p-3 border-b border-gray-200 bg-pink-50">
+                      <div className="text-sm font-medium text-pink-700">เลือกช่วงวันที่</div>
+                    </div>
+                    <div className="p-2">
+                      <CalendarComponent
+                        initialFocus
+                        mode="range"
+                        defaultMonth={dateRange.from || new Date()}
+                        selected={{
+                          from: dateRange.from || undefined,
+                          to: dateRange.to || undefined,
+                        }}
+                        onSelect={(range) => {
+                          if (range) {
+                            setDateRange({ 
+                              from: range.from || null, 
+                              to: range.to || range.from || null 
+                            });
+                          }
+                        }}
+                        numberOfMonths={1}
+                        locale={th}
+                        classNames={{
+                          months: "flex flex-col space-y-4",
+                          month: "space-y-4",
+                          caption: "flex justify-center pt-1 relative items-center px-2",
+                          caption_label: "text-sm font-medium text-gray-900",
+                          nav: "space-x-1 flex items-center",
+                          nav_button: "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100 hover:bg-gray-100 rounded-full",
+                          nav_button_previous: "absolute left-1",
+                          nav_button_next: "absolute right-1",
+                          table: "w-full border-collapse space-y-1",
+                          head_row: "flex",
+                          head_cell: "text-gray-500 rounded-md w-9 font-medium text-[0.8rem]",
+                          row: "flex w-full mt-2",
+                          cell: "h-9 w-9 text-center text-sm relative p-0 rounded-md focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-pink-100 [&:has([aria-selected].day-outside)]:bg-pink-50 [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected])]:rounded-md",
+                          day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-gray-100",
+                          day_range_end: "day-range-end",
+                          day_selected: "bg-pink-500 text-white hover:bg-pink-600 hover:text-white focus:bg-pink-500 focus:text-white",
+                          day_today: "bg-gray-100 text-gray-900",
+                          day_outside: "text-gray-400 opacity-50",
+                          day_disabled: "text-gray-400 opacity-50",
+                          day_range_middle: "aria-selected:bg-pink-50 aria-selected:text-gray-900",
+                          day_hidden: "invisible",
+                        }}
+                      />
+                    </div>
+                    <div className="p-2 border-t border-gray-200 bg-gray-50 flex justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setDateRange({ from: null, to: null });
+                          filterData();
+                          const dropdownTrigger = document.querySelector("[data-state='open']");
+                          if (dropdownTrigger) {
+                            (dropdownTrigger as HTMLElement).click();
+                          }
+                        }}
+                        className="text-xs h-7 border-gray-300"
+                      >
+                        ล้าง
+                      </Button>
+                      <div className="flex space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const today = new Date();
+                            setDateRange({ from: today, to: today });
+                          }}
+                          className="text-xs h-7 border-gray-300"
+                        >
+                          วันนี้
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const today = new Date();
+                            const startMonth = startOfMonth(today);
+                            const endMonth = endOfMonth(today);
+                            setDateRange({ from: startMonth, to: endMonth });
+                          }}
+                          className="text-xs h-7 border-gray-300"
+                        >
+                          เดือนนี้
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            filterData();
+                            const dropdownTrigger = document.querySelector("[data-state='open']");
+                            if (dropdownTrigger) {
+                              (dropdownTrigger as HTMLElement).click();
+                            }
+                          }}
+                          className="bg-pink-500 hover:bg-pink-600 text-white text-xs h-7"
+                          size="sm"
+                        >
+                          ตกลง
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button type="button" className="bg-pink-500 hover:bg-pink-600 text-white" onClick={filterData}>
                   ค้นหา
                 </Button>
               </div>
@@ -259,8 +404,10 @@ export default function StockInPage() {
                 <span className="ml-2">กำลังโหลดข้อมูล...</span>
               </div>
             ) : filteredStockIns.length === 0 ? (
-              <div className="text-center py-10 border rounded-md bg-gray-50">
-                <p className="text-gray-500">ไม่พบข้อมูลการนำเข้าสินค้า</p>
+              <div className="flex flex-col items-center justify-center py-10 border rounded-md bg-gray-50">
+                <Calendar className="h-12 w-12 text-gray-300 mb-3" />
+                <p className="text-gray-500 font-medium mb-1">ไม่พบข้อมูลการนำเข้าสินค้า</p>
+                <p className="text-gray-400 text-sm">ลองเปลี่ยนช่วงวันที่หรือคำค้นหา</p>
               </div>
             ) : (
               <div className="border rounded-md overflow-auto">
