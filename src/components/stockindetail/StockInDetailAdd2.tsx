@@ -109,72 +109,82 @@ export default function StockInDetailAdd() {
     // เพิ่ม console.log เพื่อดูว่าฟังก์ชันถูกเรียกหรือไม่
     const handleSaveAll = async () => {
         if (items.length === 0) {
-            toast.error("กรุณาเพิ่มรายการอย่างน้อย 1 รายการ");
-            return;
+          toast.error("กรุณาเพิ่มรายการอย่างน้อย 1 รายการ");
+          return;
         }
-
+      
         try {
-            setLoading(true);
-
-            // สร้าง FormData ใหม่
-            const formData = new FormData();
-
-            // รับ ID พนักงานจากฟอร์ม
-            const empInput = document.querySelector('input[name="empID"]') as HTMLInputElement;
-            const empID = empInput?.value;
-
-            console.log("Employee ID element:", empInput);
-            console.log("Employee ID value:", empID);
-
-            if (!empID) {
-                toast.error("กรุณาเลือกพนักงาน");
-                setLoading(false);
-                return;
-            }
-
-            // เพิ่มข้อมูลลงใน FormData
-            formData.append("empID", empID);
-            formData.append("totalPrice", grandTotal.toString());
-
-            // แปลงข้อมูลสินค้า
-            const itemsData = items.map(item => ({
-                stockID: item.stockID,
-                ingredientName: item.ingredientName,
-                quantity: item.quantity,
-                unit: item.unit,
-                pricePerUnit: item.pricePerUnit,
-                totalPrice: item.totalPrice
-            }));
-
-            console.log("Items data:", JSON.stringify(itemsData));
-            formData.append("items", JSON.stringify(itemsData));
-            formData.append("note", note);
-
-            console.log("Calling createStockInWithDetails...");
-
-            // ใช้ API fetch แทน server action โดยตรง
-            const response = await fetch('/api/stockin', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
-            }
-
-            const result = await response.json();
-            console.log("Result:", result);
-
-            toast.success("บันทึกข้อมูลสำเร็จ");
-            router.push('/admin/stockin');
-        } catch (error) {
-            console.error("Error in handleSaveAll:", error);
-            toast.error("เกิดข้อผิดพลาด: " + (error instanceof Error ? error.message : String(error)));
-        } finally {
+          setLoading(true);
+      
+          // สร้าง FormData ใหม่
+          const formData = new FormData();
+      
+          // รับ ID พนักงานจากฟอร์ม
+          const empInput = document.querySelector('input[name="empID"]') as HTMLInputElement;
+          const empID = empInput?.value;
+      
+          console.log("Employee ID element:", empInput);
+          console.log("Employee ID value:", empID);
+      
+          if (!empID) {
+            toast.error("กรุณาเลือกพนักงาน");
             setLoading(false);
+            return;
+          }
+      
+          // เพิ่มข้อมูลลงใน FormData
+          formData.append("empID", empID);
+          formData.append("totalPrice", grandTotal.toString());
+      
+          // แปลงข้อมูลสินค้า
+          const itemsData = items.map(item => ({
+            stockID: item.stockID,
+            ingredientName: item.ingredientName,
+            quantity: Number(item.quantity), // แน่ใจว่าเป็น number
+            unit: item.unit,
+            pricePerUnit: Number(item.pricePerUnit), // แน่ใจว่าเป็น number
+            totalPrice: Number(item.totalPrice) // แน่ใจว่าเป็น number
+          }));
+      
+          console.log("Items data before JSON:", itemsData);
+          const itemsJSON = JSON.stringify(itemsData);
+          console.log("Items JSON after stringify:", itemsJSON);
+          
+          formData.append("items", itemsJSON);
+          formData.append("note", note);
+      
+          // ใช้ API fetch แทน server action โดยตรง
+          const response = await fetch('/api/stockin', {
+            method: 'POST',
+            body: formData
+          });
+      
+          const responseText = await response.text();
+          console.log("Raw response:", responseText);
+          
+          let result;
+          try {
+            result = JSON.parse(responseText);
+          } catch (e) {
+            console.error("Failed to parse response:", e);
+            throw new Error("รูปแบบข้อมูลตอบกลับไม่ถูกต้อง");
+          }
+      
+          if (!response.ok) {
+            throw new Error(result.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+          }
+      
+          console.log("Result:", result);
+      
+          toast.success("บันทึกข้อมูลสำเร็จ");
+          router.push('/admin/stockin');
+        } catch (error) {
+          console.error("Error in handleSaveAll:", error);
+          toast.error("เกิดข้อผิดพลาด: " + (error instanceof Error ? error.message : String(error)));
+        } finally {
+          setLoading(false);
         }
-    };
+      };
 
     return (
         <div className="space-y-8">

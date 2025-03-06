@@ -100,64 +100,70 @@ export const createStockInWithDetails = async (formData: FormData) => {
       items = JSON.parse(itemsString);
       console.log("Items after parsing:", items);
       console.log("Number of items:", items.length);
-      console.log("First item:", items[0]);
+      if (items.length > 0) {
+        console.log("First item:", items[0]);
+      }
     } catch (error) {
       console.error("Error parsing items:", error);
       throw new Error("ข้อมูลสินค้าไม่ถูกต้อง");
     }
 
-    // สร้าง Stock_In
-    const stockIn = await prisma.stock_In.create({
-      data: {
-        stockInDateTime: new Date(),
-        totalPrice: parseFloat(totalPrice as string),
-        Employee_empID: parseInt(empID as string),
-        note: note,
-      },
-    });
-    
-    console.log("Stock in created:", stockIn);
-
-    // สร้าง Stock_In_Detail สำหรับแต่ละรายการ
-    for (const item of items) {
-      console.log("Processing item:", item);
+    // สร้าง Stock_In ด้วย transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // สร้าง Stock_In
+      const stockIn = await tx.stock_In.create({
+        data: {
+          stockInDateTime: new Date(),
+          totalPrice: parseFloat(totalPrice as string),
+          Employee_empID: parseInt(empID as string),
+          note: note,
+        },
+      });
       
-      try {
-        const stockInDetail = await prisma.stock_In_Detail.create({
-          data: {
-            Stock_In_stockInID: stockIn.stockInID,
-            Stock_stockID: item.stockID,
-            ingredientName: item.ingredientName,
-            quantity: parseFloat(item.quantity),
-            unit: item.unit,
-            pricePerUnit: parseFloat(item.pricePerUnit),
-            totalPrice: parseFloat(item.totalPrice),
-          },
-        });
+      console.log("Stock in created:", stockIn);
+  
+      // สร้าง Stock_In_Detail สำหรับแต่ละรายการ
+      for (const item of items) {
+        console.log("Processing item:", item);
         
-        console.log("Stock in detail created:", stockInDetail);
-
-        // อัพเดทจำนวนสินค้าใน Stock
-        const updatedStock = await prisma.stock.update({
-          where: { stockID: item.stockID },
-          data: {
-            Quantity: {
-              increment: parseFloat(item.quantity),
+        try {
+          const stockInDetail = await tx.stock_In_Detail.create({
+            data: {
+              Stock_In_stockInID: stockIn.stockInID,
+              Stock_stockID: parseInt(item.stockID.toString()),
+              ingredientName: item.ingredientName,
+              quantity: parseFloat(item.quantity.toString()),
+              unit: item.unit,
+              pricePerUnit: parseFloat(item.pricePerUnit.toString()),
+              totalPrice: parseFloat(item.totalPrice.toString()),
             },
-            costPrice: parseFloat(item.pricePerUnit),
-            LastUpdated: new Date(),
-          },
-        });
-        
-        console.log("Stock updated:", updatedStock);
-      } catch (detailError) {
-        console.error("Error creating stock in detail for item:", item, detailError);
-        // ทำการ rollback หรือจัดการข้อผิดพลาด
-        throw detailError;
+          });
+          
+          console.log("Stock in detail created:", stockInDetail);
+  
+          // อัพเดทจำนวนสินค้าใน Stock
+          const updatedStock = await tx.stock.update({
+            where: { stockID: parseInt(item.stockID.toString()) },
+            data: {
+              Quantity: {
+                increment: parseFloat(item.quantity.toString()),
+              },
+              costPrice: parseFloat(item.pricePerUnit.toString()),
+              LastUpdated: new Date(),
+            },
+          });
+          
+          console.log("Stock updated:", updatedStock);
+        } catch (detailError) {
+          console.error("Error creating stock in detail for item:", item, detailError);
+          throw detailError;
+        }
       }
-    }
+  
+      return stockIn;
+    });
 
-    return stockIn;
+    return result;
   } catch (error) {
     console.error("Error in createStockInWithDetails:", error);
     throw error;
