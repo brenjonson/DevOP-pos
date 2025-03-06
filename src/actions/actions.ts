@@ -335,6 +335,9 @@ export async function updateStock(stockID: number, data: {
 // เพิ่มฟังก์ชันสำหรับ Soft Delete
 export const deleteStock = async (stockID: number) => {
   try {
+    // เพิ่ม console.log เพื่อตรวจสอบค่า stockID ที่ได้รับ
+    console.log('Attempting to delete stock:', stockID);
+
     // ตรวจสอบว่ามีการใช้งานใน Stock_In_Detail หรือ StockOutDetail หรือไม่
     const stockInUse = await prisma.stock_In_Detail.findFirst({
       where: { Stock_stockID: stockID }
@@ -348,20 +351,42 @@ export const deleteStock = async (stockID: number) => {
       throw new Error("ไม่สามารถลบได้เนื่องจากมีการใช้งานในประวัติการนำเข้าหรือเบิกออก");
     }
 
+    // ตรวจสอบสถานะปัจจุบันของ stock
+    const currentStock = await prisma.stock.findUnique({
+      where: { stockID }
+    });
+    console.log('Current stock status:', currentStock);
+
     // ทำ Soft Delete
     const updatedStock = await prisma.stock.update({
-      where: { stockID },
+      where: { 
+        stockID: stockID 
+      },
       data: {
         isDeleted: true,
         deletedAt: new Date(),
         LastUpdated: new Date()
-      }
+      },
     });
 
-    return { success: true, data: updatedStock };
+    // เพิ่ม console.log เพื่อตรวจสอบผลลัพธ์
+    console.log('Updated stock result:', updatedStock);
+
+    // ตรวจสอบอีกครั้งว่าการอัพเดทสำเร็จ
+    const verifyUpdate = await prisma.stock.findUnique({
+      where: { stockID }
+    });
+    console.log('Verification after update:', verifyUpdate);
+
+    return { 
+      success: true, 
+      data: updatedStock,
+      message: 'ลบวัตถุดิบเรียบร้อยแล้ว'
+    };
+
   } catch (error) {
     console.error('Delete stock error:', error);
-    throw error;
+    throw new Error(error instanceof Error ? error.message : 'ไม่สามารถลบวัตถุดิบได้');
   }
 };
 
