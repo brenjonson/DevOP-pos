@@ -1,7 +1,40 @@
-﻿import { NextResponse } from "next/server";
-import { fetchStockIn } from "../../../actions/actions";
+﻿// src/app/api/stockin/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { createStockInWithDetails } from "@/actions/actions";
+import { fetchStockIn } from "@/actions/actions";
+
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    
+    // เรียกใช้ server action เพื่อสร้างการนำเข้าสินค้าพร้อมรายละเอียด
+    const result = await createStockInWithDetails(formData);
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: "บันทึกการนำเข้าสินค้าเรียบร้อยแล้ว",
+      data: result 
+    });
+  } catch (error) {
+    console.error("Error creating stock in:", error);
+    
+    return NextResponse.json({ 
+      success: false, 
+      message: error instanceof Error ? error.message : "เกิดข้อผิดพลาดในการบันทึกข้อมูล" 
+    }, { status: 500 });
+  }
+}
 
 export async function GET() {
-    const stockIn = await fetchStockIn()
-    return Response.json(stockIn);
+  try {
+    // ฟังก์ชันนี้ควรนำเข้าจากไฟล์ actions ของคุณ
+    const result = await fetchStockIn();
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("Error fetching stock in:", error);
+    return NextResponse.json({ 
+      success: false, 
+      message: "เกิดข้อผิดพลาดในการดึงข้อมูล" 
+    }, { status: 500 });
+  }
 }

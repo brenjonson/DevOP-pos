@@ -72,127 +72,95 @@ export async function addStockIn(formdata: FormData) {
 
 
 //Stockนรกตอนนี้
+// เพิ่ม console.log เพื่อการดีบัก
+// ใน src/actions/actions.ts
+// ใน src/actions/actions.ts
 export const createStockInWithDetails = async (formData: FormData) => {
   try {
-    const empID = parseInt(formData.get("empID") as string);
-    const totalPrice = parseFloat(formData.get("totalPrice") as string);
-    const note = formData.get("note") as string || ""; // รับค่า note
-
+    console.log("Server action called");
+    
+    const empID = formData.get("empID");
+    const totalPrice = formData.get("totalPrice");
+    const itemsString = formData.get("items") as string;
+    const note = formData.get("note") as string || "";
+    
+    console.log("empID:", empID);
+    console.log("totalPrice:", totalPrice);
+    console.log("note:", note);
+    console.log("raw items string:", itemsString);
+    
+    // ตรวจสอบข้อมูลที่จำเป็น
     if (!empID) {
       throw new Error("กรุณาเลือกพนักงาน");
+    }
+
+    // แปลง items string กลับเป็น array
+    let items = [];
+    try {
+      items = JSON.parse(itemsString);
+      console.log("Items after parsing:", items);
+      console.log("Number of items:", items.length);
+      console.log("First item:", items[0]);
+    } catch (error) {
+      console.error("Error parsing items:", error);
+      throw new Error("ข้อมูลสินค้าไม่ถูกต้อง");
     }
 
     // สร้าง Stock_In
     const stockIn = await prisma.stock_In.create({
       data: {
         stockInDateTime: new Date(),
-        totalPrice: totalPrice,
-        Employee_empID: empID,
+        totalPrice: parseFloat(totalPrice as string),
+        Employee_empID: parseInt(empID as string),
         note: note,
       },
     });
-
-    // แปลง items string กลับเป็น array
-    const items = JSON.parse(formData.get("items") as string) as StockInItem[];
+    
+    console.log("Stock in created:", stockIn);
 
     // สร้าง Stock_In_Detail สำหรับแต่ละรายการ
     for (const item of items) {
-      await prisma.stock_In_Detail.create({
-        data: {
-          Stock_In_stockInID: stockIn.stockInID,
-          Stock_stockID: item.stockID,
-          ingredientName: item.ingredientName,
-          quantity: parseFloat(item.quantity),
-          unit: item.unit,
-          pricePerUnit: parseFloat(item.pricePerUnit),
-          totalPrice: parseFloat(item.totalPrice),
-        },
-      });
-
-      // อัพเดทจำนวนสินค้าใน Stock
-      await prisma.stock.update({
-        where: { stockID: item.stockID },
-        data: {
-          Quantity: {
-            increment: parseFloat(item.quantity),
+      console.log("Processing item:", item);
+      
+      try {
+        const stockInDetail = await prisma.stock_In_Detail.create({
+          data: {
+            Stock_In_stockInID: stockIn.stockInID,
+            Stock_stockID: item.stockID,
+            ingredientName: item.ingredientName,
+            quantity: parseFloat(item.quantity),
+            unit: item.unit,
+            pricePerUnit: parseFloat(item.pricePerUnit),
+            totalPrice: parseFloat(item.totalPrice),
           },
-          costPrice: parseFloat(item.pricePerUnit),
-          LastUpdated: new Date(),
-        },
-      });
+        });
+        
+        console.log("Stock in detail created:", stockInDetail);
+
+        // อัพเดทจำนวนสินค้าใน Stock
+        const updatedStock = await prisma.stock.update({
+          where: { stockID: item.stockID },
+          data: {
+            Quantity: {
+              increment: parseFloat(item.quantity),
+            },
+            costPrice: parseFloat(item.pricePerUnit),
+            LastUpdated: new Date(),
+          },
+        });
+        
+        console.log("Stock updated:", updatedStock);
+      } catch (detailError) {
+        console.error("Error creating stock in detail for item:", item, detailError);
+        // ทำการ rollback หรือจัดการข้อผิดพลาด
+        throw detailError;
+      }
     }
 
     return stockIn;
   } catch (error) {
-    console.error("Error creating stock in with details:", error);
+    console.error("Error in createStockInWithDetails:", error);
     throw error;
-  }
-};
-
-
-export const outStock = async (formdata: FormData) => {
-  try {
-    const empID = formdata.get("empID");
-    const stockID = formdata.get("stockID");
-    const quantity = formdata.get("quantity");
-    const unit = formdata.get("unit");
-
-    if (!empID) {
-      throw new Error("รับชื่อพนักงานไม่ได้");
-    }
-    if (!stockID) {
-      throw new Error("รับ StockID ไม่ได้");
-    }
-    if (!quantity || parseFloat(quantity as string) <= 0) {
-      throw new Error("รับจำนวนไม่ได้");
-    }
-    if (!unit) {
-      throw new Error("รับหน่วยไม่ได้");
-    }
-
-    const Employee_empID = parseInt(empID as string);
-    const Stock_stockID = parseInt(stockID as string);
-    const Quantity = parseFloat(quantity as string);
-    const Unit = unit as string;
-    const tsCreatedAt = new Date();
-    const note = formdata.get("note") as string;
-
-    // สร้างข้อมูลการเบิกของใน TimeScription
-    const stock_out = await prisma.timeScription.create({
-      data: {
-        Employee_empID,
-        Stock_stockID,
-        tsCreatedAt,
-        Unit,
-        Quantity,
-        note,
-      },
-    });
-
-    // เช็คจำนวนของในสต็อกก่อนที่จะเบิก
-    const currentStock = await prisma.stock.findUnique({
-      where: { stockID: Stock_stockID }
-    });
-
-    if (!currentStock || currentStock.Quantity < Quantity) {
-      throw new Error("จำนวนในสต็อกไม่พอสำหรับการเบิก");
-    }
-
-    // หักจำนวนจาก stock หลัก
-    const updatedStock = await prisma.stock.update({
-      where: { stockID: Stock_stockID },
-      data: {
-        Quantity: {
-          decrement: Quantity,
-        },
-        LastUpdated: new Date(),
-      },
-    });
-
-    return { stock_out, updatedStock };
-  } catch (error) {
-    console.error("Error fetching stock:", error);
-    return [];
   }
 };
 
