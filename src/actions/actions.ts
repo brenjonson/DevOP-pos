@@ -434,8 +434,16 @@ export const cancelStockIn = async (
       return updatedStockIn;
     });
   } catch (error) {
-    console.error("Error canceling stock in:", error);
-    throw error;
+    // จัดการกับ error ให้ถูกต้อง
+    console.error("Error canceling stock in:", error instanceof Error ? error.message : "Unknown error");
+    
+    // ตรวจสอบประเภทของ error ก่อนโยน
+    if (error instanceof Error) {
+      throw error;
+    } else {
+      // แปลง error ที่ไม่ใช่ Error instance เป็น Error object
+      throw new Error("เกิดข้อผิดพลาดในการยกเลิกการนำเข้าสินค้า");
+    }
   }
 };
 

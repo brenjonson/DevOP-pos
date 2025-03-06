@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { 
   Calendar, Search, Eye, ArrowUpDown, 
   Download, RefreshCw, Plus, Users,
-  ChevronDown
+  ChevronDown, XCircle, AlertCircle
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -34,6 +34,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Toaster } from '@/components/ui/sonner';
+import { Dialog,DialogClose,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import ComboBoxCus from '@/components/combobox/ComboBoxCus';
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { addDays, format, startOfMonth, endOfMonth, isToday } from "date-fns";
 import { th } from "date-fns/locale";
@@ -55,6 +60,9 @@ export default function StockInPage() {
     totalValue: 0,
     uniqueEmployees: 0
   });
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedStockIn, setSelectedStockIn] = useState(null);
+  const [cancelNote, setCancelNote] = useState('');
 
   // ดึงข้อมูลการนำเข้า
   const fetchStockIns = async () => {
@@ -103,7 +111,88 @@ export default function StockInPage() {
       setIsModalOpen(true);
     } catch (error) {
       console.error('Error fetching stock in details:', error);
-      alert('ไม่สามารถดึงข้อมูลรายละเอียดได้');
+      toast.error('ไม่สามารถดึงข้อมูลรายละเอียดได้');
+    }
+  };
+
+  // แสดงหน้าต่างยกเลิกการนำเข้า
+  const handleOpenCancelDialog = (stockIn) => {
+    if (stockIn.isCanceled) {
+      toast.error('ไม่สามารถยกเลิกได้', {
+        description: 'รายการนี้ถูกยกเลิกไปแล้ว',
+        icon: <XCircle className="h-5 w-5 text-red-500" />,
+      });
+      return;
+    }
+    setSelectedStockIn(stockIn);
+    setCancelNote('');
+    setCancelDialogOpen(true);
+  };
+
+  // ยกเลิกการนำเข้า
+  const handleCancelStockIn = async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const empID = formData.get('empID');
+    
+    if (!selectedStockIn || !cancelNote.trim()) {
+      toast.error('กรุณาระบุสาเหตุการยกเลิก');
+      return;
+    }
+    
+    if (!empID) {
+      toast.error('กรุณาเลือกพนักงานผู้ยกเลิก');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/stockin/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          stockInID: selectedStockIn.stockInID,
+          canceledByEmpID: parseInt(empID),
+          cancelNote: cancelNote
+        }),
+      });
+
+      // ตรวจสอบว่า response ถูกต้องหรือไม่
+      let errorMessage = 'ไม่สามารถยกเลิกรายการได้';
+      
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+
+      // แสดง toast แจ้งเตือนเมื่อยกเลิกสำเร็จ
+      toast.success('ยกเลิกการนำเข้าสินค้าเรียบร้อยแล้ว', {
+        description: `รายการนำเข้ารหัส ${selectedStockIn.stockInID} ถูกยกเลิก`,
+        duration: 5000,
+      });
+      
+      setCancelDialogOpen(false);
+      fetchStockIns(); // รีเฟรชข้อมูล
+    } catch (error) {
+      console.error('Error canceling stock in:', error);
+      
+      // แสดง toast แจ้งเตือนเมื่อเกิดข้อผิดพลาด
+      toast.error('เกิดข้อผิดพลาดในการยกเลิกรายการ', {
+        description: error.message || 'โปรดลองอีกครั้งในภายหลัง',
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -194,6 +283,7 @@ export default function StockInPage() {
 
   return (
     <Admintemplate>
+      <Toaster richColors position="top-right" />
       <div className="p-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <div>
@@ -480,7 +570,16 @@ export default function StockInPage() {
                               <DropdownMenuItem onClick={() => handleViewDetails(stockIn.stockInID)}>
                                 ดูรายละเอียด
                               </DropdownMenuItem>
-                              <DropdownMenuItem>พิมพ์ใบนำเข้า</DropdownMenuItem>
+                              {!stockIn.isCanceled && (
+                                <DropdownMenuItem onClick={() => handleOpenCancelDialog(stockIn)} className="text-red-600 focus:text-red-600">
+                                  <XCircle className="h-4 w-4 mr-2" />
+                                  ยกเลิกการนำเข้า
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem>
+                                <Download className="h-4 w-4 mr-2" />
+                                พิมพ์ใบนำเข้า
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -513,6 +612,71 @@ export default function StockInPage() {
           </div>
         )}
       </div>
+
+      {/* Dialog ยกเลิกการนำเข้า */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-600">
+              <AlertCircle className="h-5 w-5 mr-2" />
+              ยกเลิกการนำเข้าสินค้า
+            </DialogTitle>
+            <DialogDescription>
+              เมื่อยกเลิกการนำเข้า ระบบจะปรับลดจำนวนสินค้าในคลังตามรายการที่นำเข้า
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCancelStockIn}>
+            <div className="space-y-4 py-2">
+              {selectedStockIn && (
+                <div className="bg-gray-50 p-3 rounded-md text-sm">
+                  <div><span className="font-medium">รหัสการนำเข้า:</span> {selectedStockIn.stockInID}</div>
+                  <div><span className="font-medium">วันที่นำเข้า:</span> {new Date(selectedStockIn.stockInDateTime).toLocaleString('th-TH')}</div>
+                  <div><span className="font-medium">มูลค่า:</span> {formatPrice(selectedStockIn.totalPrice)}</div>
+                  <div><span className="font-medium">พนักงานที่นำเข้า:</span> {selectedStockIn.employee ? `${selectedStockIn.employee.empFname} ${selectedStockIn.employee.empLname}` : 'ไม่ระบุ'}</div>
+                </div>
+              )}
+              
+              <div>
+                <label htmlFor="canceledBy" className="block text-sm font-medium text-gray-700 mb-1">
+                  พนักงานผู้ยกเลิก <span className="text-red-500">*</span>
+                </label>
+                <ComboBoxCus />
+              </div>
+              
+              <div>
+                <label htmlFor="cancelReason" className="block text-sm font-medium text-gray-700 mb-1">
+                  ระบุสาเหตุการยกเลิก <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  id="cancelReason"
+                  value={cancelNote}
+                  onChange={(e) => setCancelNote(e.target.value)}
+                  placeholder="กรุณาระบุสาเหตุการยกเลิกรายการนำเข้านี้"
+                  rows={3}
+                  className="w-full"
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter className="sm:justify-between mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCancelDialogOpen(false)}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={!cancelNote.trim() || loading}
+              >
+                {loading ? 'กำลังดำเนินการ...' : 'ยืนยันการยกเลิก'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Admintemplate>
   );
 }
