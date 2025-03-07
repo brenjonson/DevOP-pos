@@ -99,7 +99,7 @@ function ModalAddIngre({ closemodal }: ModalAddIngreProps) {
     return (
         <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden transform transition-all">
             {/* ส่วนหัว */}
-            <div className="bg-gradient-to-r from-pink-400 to-purple-500 p-6 text-white">
+            <div className="bg-[#FFB8DA] hover:bg-[#fcc6e0] p-6 text-white">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                         <Plus className="h-6 w-6" />
@@ -274,7 +274,7 @@ function ModalAddIngre({ closemodal }: ModalAddIngreProps) {
                     <Button
                         type="submit"
                         disabled={loading}
-                        className="w-full sm:w-auto bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white"
+                        className="w-full sm:w-auto bg-[#FFB8DA] hover:bg-[#fcc6e0] hover:from-pink-600 hover:to-purple-700 text-white"
                     >
                         {loading ? (
                             <span className="flex items-center">

@@ -171,6 +171,73 @@ export const createStockInWithDetails = async (formData: FormData) => {
 };
 
 
+export const outStock = async (formdata: FormData) => {
+  try {
+    const empID = formdata.get("empID");
+    const stockID = formdata.get("stockID");
+    const quantity = formdata.get("quantity");
+    const unit = formdata.get("unit");
+
+    if (!empID) {
+      throw new Error("รับชื่อพนักงานไม่ได้");
+    }
+    if (!stockID) {
+      throw new Error("รับ StockID ไม่ได้");
+    }
+    if (!quantity || parseFloat(quantity as string) <= 0) {
+      throw new Error("รับจำนวนไม่ได้");
+    }
+    if (!unit) {
+      throw new Error("รับหน่วยไม่ได้");
+    }
+
+    const Employee_empID = parseInt(empID as string);
+    const Stock_stockID = parseInt(stockID as string);
+    const Quantity = parseFloat(quantity as string);
+    const Unit = unit as string;
+    const tsCreatedAt = new Date();
+    const note = formdata.get("note") as string;
+
+    // สร้างข้อมูลการเบิกของใน TimeScription
+    const stock_out = await prisma.timeScription.create({
+      data: {
+        Employee_empID,
+        Stock_stockID,
+        tsCreatedAt,
+        Unit,
+        Quantity,
+        note,
+      },
+    });
+
+    // เช็คจำนวนของในสต็อกก่อนที่จะเบิก
+    const currentStock = await prisma.stock.findUnique({
+      where: { stockID: Stock_stockID }
+    });
+
+    if (!currentStock || currentStock.Quantity < Quantity) {
+      throw new Error("จำนวนในสต็อกไม่พอสำหรับการเบิก");
+    }
+
+    // หักจำนวนจาก stock หลัก
+    const updatedStock = await prisma.stock.update({
+      where: { stockID: Stock_stockID },
+      data: {
+        Quantity: {
+          decrement: Quantity,
+        },
+        LastUpdated: new Date(),
+      },
+    });
+
+    return { stock_out, updatedStock };
+  } catch (error) {
+    console.error("Error fetching stock:", error);
+    return [];
+  }
+};
+
+
 
 //fetch ข้อมูลจากฐานข้อมูล
 export const fetchStock = async (searchTerm = '') => {
